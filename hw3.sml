@@ -62,24 +62,24 @@ fun first_answer f lst =
 	case lst of 
 		[] => raise NoAnswer
 	  | hd::tl => case f hd of
-	  				  SOME v => v
-	  				| NONE => first_answer f tl
+	  		SOME v => v
+	  	      | NONE => first_answer f tl
 
 fun all_answers f lst =
 	case lst of 
 		[] => SOME []
 	  | hd::tl =>case (f hd, all_answers f tl) of
-		  				 (NONE,_) => NONE
-		  			   | (_,NONE) => NONE
-		  			   | (SOME p, SOME q) => SOME (p @ q)
+			     (NONE,_) => NONE
+			   | (_,NONE) => NONE
+			   | (SOME p, SOME q) => SOME (p @ q)
 
 fun all_answers2 f lst =
 	let fun helper(acc,lst)=
 			case lst of
 				[] => SOME acc
 			  | hd::tl => case f hd of
-			  				NONE => NONE
-			  			  | SOME v => helper(acc@v, tl)
+				            NONE => NONE
+					  | SOME v => helper(acc@v, tl)
 	in helper([],lst)
 	end
 
