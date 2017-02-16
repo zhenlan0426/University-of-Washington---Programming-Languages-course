@@ -123,3 +123,90 @@ fun match(v,p)=
 
 fun first_match(v,pLst)=
 	SOME (first_answer (fn p=>match(v,p)) pLst) handle NoAnswer => NONE
+
+
+def LossMask(Y,P,mask):
+    # Y should have shape (n,N), P (N,d) and mask (n,N)
+    return (np.dot(Y*mask,np.log(P)) + np.dot((1-Y)*mask,np.log(1-P)))/np.sum(mask,1,keepdims=True)
+
+def dataGenMask(n,N,p1,p2,P):
+    # P should be of shape (N,d) and serves as hyper-para
+    # p1 is the prob for Y, p2 for mask
+    mask = np.broadcast_to(np.random.rand(1,N)>p2,(n,N))
+    while True:
+        Y = np.random.rand(n,N)>p1
+        C = LossMask(Y,P,mask)
+        yield (C,mask)
+
+def LossY(Y,P):
+    # Y should have shape (n,N) and P (N,d)
+    return (np.dot(Y,np.log(P)) + np.dot(1-Y,np.log(1-P)))/P.shape[0]
+
+def dataGenY(n,N,p,P):
+    # P should be of shape (N,d)
+    while True:
+        Y = np.random.randn(n,N)>p
+        C = LossY(Y,P)
+        yield (C,Y)
+
+logLoss = lambda y,p: np.mean(y*np.log(p) + (1-y)*np.log(1-p))
+
+def sigmoid(x):
+    return 1/(1+np.exp(-x))
+    
+class GBM_k_BinaryOutput(BaseEstimator, ClassifierMixin):
+    
+    def __init__(self,BaseEst,M_est,learnRate,BasePara,K,baseline):
+        self.BaseEst=BaseEst
+        self.M_est=M_est
+        self.learnRate=learnRate
+        self.estimator_=[]
+        self.BasePara=BasePara
+        self.K = K
+        self.baseline = baseline
+        
+    def fit(self,dataGen,restart=True,M_add=None):
+          
+        if M_add==None:
+            M_add=self.M_est
+            
+        if restart==True:
+            self.estimator_=[]
+
+        for m in range(M_add):
+            X,Y = dataGen.next()
+            yp = self.predict_proba(X)
+            print "iteration:{}, logLoss:{}".format(m,logLoss(Y,yp))
+            self.estimator_.append(self.BaseEst(**self.BasePara).fit(X,Y-yp))
+
+        self.M_est=len(self.estimator_)
+        return self
+        
+        
+    def predict_raw(self,X):
+        yhat=np.copy(self.baseline)
+        for m in self.estimator_:
+            yhat=yhat+m.predict(X)
+        return yhat       
+        
+    def predict_class(self,X):
+        return self.predict_raw(X)>0
+
+    def predict_proba(self,X):
+        return sigmoid(self.learnRate*self.predict_raw(X))
+         
+    def plot_MLE(self,X,y):
+        accr=np.zeros(self.M_est)        
+        y_raw=np.copy(self.baseline)
+            
+        for m in range(self.M_est):
+            y_raw=y_raw + self.learnRate*self.estimator_[m].predict(X)
+            yp=sigmoid(y_raw)
+            accr[m]=logLoss(y,yp)
+        plt.plot(accr)
+	
+Model=GBM_k_BinaryOutput(ExtraTreeRegressor,100,0.01,\
+                         {'max_depth':8,'splitter':'random','max_features':0.9},\
+                        N,np.zeros(N))
+
+Model.fit(dataGenY(1000,N,p,P_beta))
